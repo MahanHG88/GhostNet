@@ -1,0 +1,19 @@
+# secrets — never commit
+.env
+server.key
+server.crt
+
+# runtime data / logs / generated state (all the JSON files here are a live datastore, not code)
+*.log
+*.json
+banned_ips.txt
+nohup.out
+tmp/
+__pycache__/
+
+# local backups and editor saves
+*.bak_*
+*.save
+
+# generated documents
+*.docx
