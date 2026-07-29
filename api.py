@@ -5,6 +5,7 @@ import requests
 import hashlib
 
 from telegram_notify import notify
+from scan_detector import is_secret_scan_path, record_scan_hit
 
 app = FastAPI(title="GhostNet Threat Intelligence Gateway Engine", version="2.5.0")
 
@@ -25,6 +26,10 @@ async def notify_on_request(request: Request, call_next):
     if who:
         msg += f"\nCustomer: {who}"
     notify(msg)
+
+    if response.status_code == 404 and is_secret_scan_path(request.url.path):
+        record_scan_hit(client_ip, request.url.path, response.status_code)
+
     return response
 
 API_USERS_FILE = "/root/Kharazmi/api_users.json"

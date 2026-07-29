@@ -8,6 +8,7 @@ import requests
 import hashlib
 
 from telegram_notify import notify
+from tamperlog import log_event
 
 LOG_FILE = "raw_attacks.json"
 BANNED_FILE = "banned_ips.txt"
@@ -119,13 +120,18 @@ def log_attack_to_json(ip, port, payload, ja3=None, ja4=None):
 def block_ip(ip):
     if ip not in IP_HISTORY["banned"]:
         try:
-            subprocess.run(["sudo", "ufw", "deny", "from", ip], check=True)
+            # iptables, not ufw: ufw was found inactive (Status: inactive) on this
+            # host, meaning every ban this function issued was silently unenforced.
+            # iptables is what defender.py already uses and takes effect immediately
+            # regardless of ufw's enabled/disabled state.
+            subprocess.run(["sudo", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], check=True)
         except:
             pass
         with open(BANNED_FILE, "a") as f:
             f.write(ip + "\n")
         IP_HISTORY["banned"].append(ip)
-        notify(f"Honeypot banned IP\n{ip}")
+        h = log_event("ban", "honeypot", f"Banned IP {ip}")
+        notify(f"Honeypot banned IP\n{ip}" + (f"\nledger: {h[:12]}" if h else ""))
 
 def handle_connection(conn, addr):
     ip = addr[0]
@@ -157,7 +163,8 @@ def handle_connection(conn, addr):
             
         decoded_payload = raw_buffer.decode('utf-8', errors='ignore')
         log_attack_to_json(ip, port, decoded_payload, ja3, ja4)
-        notify(f"Honeypot capture\nIP: {ip}:{port}\nJA3: {ja3 or '-'}\nJA4: {ja4 or '-'}")
+        h = log_event("capture", ip, f"Honeypot capture on port {port} (JA3 {ja3 or '-'}, JA4 {ja4 or '-'})")
+        notify(f"Honeypot capture\nIP: {ip}:{port}\nJA3: {ja3 or '-'}\nJA4: {ja4 or '-'}" + (f"\nledger: {h[:12]}" if h else ""))
 
         is_critical_payload = any(bad_string in decoded_payload for bad_string in MALICIOUS_PAYLOADS)
         
