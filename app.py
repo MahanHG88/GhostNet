@@ -2099,7 +2099,7 @@ def render_landing():
             elif st.session_state.admin_2fa_stage == "email":
                 with st.container(border=True, key="gncard_emailcode"):
                     st.subheader("Step 3 of 3 — Email Code")
-                    st.caption(f"Code sent to **{ADMIN_2FA_EMAIL}**. It expires in 10 minutes.")
+                    st.caption("Code sent to the registered email address. It expires in 10 minutes.")
                     with st.form("admin_email_2fa_form"):
                         entered_email_code = st.text_input("6-Digit Code", placeholder="123456")
                         email_submitted = st.form_submit_button("Complete Sign-In", use_container_width=True)
