@@ -73,38 +73,42 @@ def send_code_email(to_email, code, purpose="verification"):
 
     html_body = f"""\
 <html>
-  <body style="margin:0;padding:0;background-color:#0b0f14;font-family:'Segoe UI',Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0b0f14;padding:40px 0;">
+  <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Satoshi',-apple-system,BlinkMacSystemFont,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
       <tr>
         <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#111826;border:1px solid #1f2937;border-radius:16px;overflow:hidden;">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border:2px solid #000000;border-radius:12px;overflow:hidden;">
             <tr>
               <td style="padding:32px 40px 8px 40px;text-align:center;">
-                <div style="font-size:26px;font-weight:800;letter-spacing:4px;color:#F4FF00;">GHOSTNET</div>
-                <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Autonomous Threat Intelligence &amp; Active Defense Platform</div>
+                <div style="font-family:'Cabinet Grotesk','Arial Black',sans-serif;font-size:26px;font-weight:800;letter-spacing:1px;color:#000000;text-transform:uppercase;">
+                  &#9889; GHOSTNET
+                </div>
+                <div style="display:inline-block;margin-top:12px;background-color:#ffffff;border:2px solid #000000;border-radius:999px;padding:5px 16px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#000000;">
+                  Threat Intelligence &amp; Active Defense
+                </div>
               </td>
             </tr>
             <tr>
               <td style="padding:0 40px;">
-                <hr style="border:0;height:1px;background-image:linear-gradient(to right, rgba(244,255,0,0), rgba(244,255,0,0.5), rgba(244,255,0,0));margin:24px 0;">
+                <hr style="border:0;height:2px;background-color:#000000;margin:24px 0;">
               </td>
             </tr>
             <tr>
               <td style="padding:0 40px;text-align:center;">
-                <div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">{heading}</div>
-                <div style="font-size:14px;color:#94a3b8;line-height:1.5;margin-bottom:28px;">{intro}</div>
-                <div style="display:inline-block;background-color:#0b0f14;border:1px solid #F4FF00;border-radius:12px;padding:16px 32px;font-size:32px;font-weight:800;letter-spacing:10px;color:#F4FF00;">{code}</div>
-                <div style="font-size:12px;color:#64748b;margin-top:24px;">{expiry_note}</div>
+                <div style="font-family:'Cabinet Grotesk','Arial Black',sans-serif;font-size:19px;font-weight:800;color:#000000;margin-bottom:8px;text-transform:uppercase;letter-spacing:-0.01em;">{heading}</div>
+                <div style="font-size:14px;color:#272727;line-height:1.5;margin-bottom:28px;">{intro}</div>
+                <div style="display:inline-block;background-color:#ffe17c;border:2px solid #000000;border-radius:12px;padding:16px 32px;font-family:'Cabinet Grotesk','Arial Black',sans-serif;font-size:32px;font-weight:800;letter-spacing:10px;color:#000000;">{code}</div>
+                <div style="font-size:12px;color:#272727;margin-top:24px;font-weight:600;">{expiry_note}</div>
               </td>
             </tr>
             <tr>
               <td style="padding:0 40px;">
-                <hr style="border:0;height:1px;background-color:rgba(148,163,184,0.15);margin:28px 0 20px 0;">
+                <hr style="border:0;height:2px;background-color:#000000;margin:28px 0 20px 0;">
               </td>
             </tr>
             <tr>
               <td style="padding:0 40px 32px 40px;text-align:center;">
-                <div style="font-size:12px;color:#64748b;">{footnote}</div>
+                <div style="font-size:12px;color:#272727;">{footnote}</div>
               </td>
             </tr>
           </table>
