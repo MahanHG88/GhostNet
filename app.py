@@ -3199,7 +3199,7 @@ FP_FORMATS = [
         "example": "e7d705a3286e19ea42f587b344ee6865",
         "built_from": "TLS version, cipher suites, extensions, elliptic curves and point formats from the ClientHello, joined and MD5-hashed.",
         "survives": "IP rotation, VPN/proxy hop",
-        "defeated_by": "Changing the TLS stack or its cipher/extension configuration.",
+        "defeated_by": "A different TLS stack.",
     },
     {
         "prefix": "t13 / t12",
@@ -3209,7 +3209,7 @@ FP_FORMATS = [
         "example": "t1315_8d1f2a4b9c03_4e77a1d2b8f0",
         "built_from": "Same ClientHello evidence as JA3 but structured and sorted, so it is stable against extension shuffling.",
         "survives": "IP rotation, extension order randomisation",
-        "defeated_by": "Changing the TLS stack itself.",
+        "defeated_by": "A different TLS stack.",
     },
     {
         "prefix": "h4h_",
@@ -3219,7 +3219,7 @@ FP_FORMATS = [
         "example": "h4h_11getcsr_5_cac2c496544b_41f5d6",
         "built_from": "Header ORDER (the client library's own emit order), header name CASING pattern, HTTP version, method, CRLF vs bare LF, spacing after the colon, absolute vs relative URI.",
         "survives": "IP rotation, VPN hop, User-Agent spoofing, changing the requested path or Host",
-        "defeated_by": "Switching HTTP client library, or hand-editing header order/casing.",
+        "defeated_by": "A different HTTP client.",
     },
     {
         "prefix": "sshc_",
@@ -3229,7 +3229,7 @@ FP_FORMATS = [
         "example": "sshc_20_16be9ad569_e3b0",
         "built_from": "The SSH version banner the client sends first — protocol level, software product and build comment.",
         "survives": "IP rotation, VPN hop",
-        "defeated_by": "Patching the client library to forge a different banner.",
+        "defeated_by": "A forged banner.",
     },
     {
         "prefix": "rdpc_",
@@ -3239,7 +3239,7 @@ FP_FORMATS = [
         "example": "rdpc_42_37_4a_26db7dc6",
         "built_from": "X.224 connection-request geometry: TPKT and X.224 lengths, the shape (not value) of the mstshash cookie, and the requested security-protocol flags.",
         "survives": "IP rotation, cookie value randomisation",
-        "defeated_by": "Using a different RDP client implementation.",
+        "defeated_by": "A different RDP client.",
     },
     {
         "prefix": "gsig_",
@@ -3249,7 +3249,7 @@ FP_FORMATS = [
         "example": "gsig_4d474c4e_32_9-0-0_3f112fb8e2",
         "built_from": "Shape of an opaque first packet: leading bytes, exponential length bucket, printable/control/high byte histogram, and any printable beacon token with host and port normalised out.",
         "survives": "IP rotation, retargeting the same scanner at a different host or port",
-        "defeated_by": "Changing the probe payload itself.",
+        "defeated_by": "A different payload.",
     },
 ]
 
