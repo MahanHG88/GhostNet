@@ -10,6 +10,8 @@ import uuid
 import smtplib
 import requests
 import pyotp
+import qrcode
+import io
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -39,6 +41,12 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 CIVILIAN_PASSWORD = os.environ.get("CIVILIAN_PASSWORD", "")
 ADMIN_TOTP_SECRET = os.environ.get("ADMIN_TOTP_SECRET", "")
 ADMIN_2FA_EMAIL = os.environ.get("ADMIN_2FA_EMAIL", "")
+
+
+def make_qr_png_bytes(uri):
+    buf = io.BytesIO()
+    qrcode.make(uri).save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def send_code_email(to_email, code, purpose="verification"):
@@ -1367,6 +1375,17 @@ if "admin_2fa_stage" not in st.session_state:
     st.session_state.admin_2fa_email_code = None
     st.session_state.admin_2fa_email_code_time = None
 
+if "dev_2fa_stage" not in st.session_state:
+    st.session_state.dev_2fa_stage = None
+    st.session_state.dev_2fa_email = None
+    st.session_state.dev_2fa_new_secret = None
+    st.session_state.dev_2fa_email_code = None
+    st.session_state.dev_2fa_email_code_time = None
+
+if "new_account_email" not in st.session_state:
+    st.session_state.new_account_email = None
+    st.session_state.new_account_totp_secret = None
+
 if "ai_chat_history" not in st.session_state:
     st.session_state.ai_chat_history = []
     st.session_state.ai_admin_unlocked = False
@@ -2132,6 +2151,14 @@ def render_landing():
             st.markdown("**Isolated & metered**  \nEvery account gets its own API key with a usage quota, so access stays predictable.")
         with pcol3:
             st.markdown("**Abuse-hardened**  \nA proof-of-work gate and fingerprint checks keep the feed itself safe from scraping.")
+        st.markdown(
+            "<div style='text-align:center; font-size:0.85rem; opacity:0.75; margin-top:0.5rem;'>"
+            "🔒 <strong>Every account is 3-factor secured</strong> — your password, a code from an authenticator app "
+            "unique to your account, and a one-time code emailed to you. A leaked password alone can't be used to "
+            "sign in or touch your API key."
+            "</div>",
+            unsafe_allow_html=True,
+        )
         st.markdown("<br>", unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns([1, 1.3, 1])
@@ -2140,94 +2167,214 @@ def render_landing():
                 auth_tab, register_tab = st.tabs(["Sign In", "Create Paid Account"])
 
                 with auth_tab:
-                    with st.form("dev_login_form"):
-                        login_email = st.text_input("Verified Email Address", placeholder="you@example.com")
-                        login_pass = st.text_input("Account Password", type="password", placeholder="••••••••")
-                        dev_submitted = st.form_submit_button("Authenticate", use_container_width=True)
+                    if st.session_state.dev_2fa_stage is None:
+                        with st.form("dev_login_form"):
+                            login_email = st.text_input("Verified Email Address", placeholder="you@example.com")
+                            login_pass = st.text_input("Account Password", type="password", placeholder="••••••••")
+                            dev_submitted = st.form_submit_button("Authenticate", use_container_width=True)
 
-                    if dev_submitted:
-                        if not login_email or not login_pass:
-                            gn_warning("Enter both your email and password.", title="Missing Information")
-                        else:
+                        if dev_submitted:
+                            if not login_email or not login_pass:
+                                gn_warning("Enter both your email and password.", title="Missing Information")
+                            else:
+                                users = load_api_users()
+                                if login_email in users and users[login_email]["password"] == login_pass:
+                                    st.session_state.dev_2fa_email = login_email
+                                    if users[login_email].get("totp_secret"):
+                                        st.session_state.dev_2fa_stage = "totp_verify"
+                                    else:
+                                        st.session_state.dev_2fa_new_secret = pyotp.random_base32()
+                                        st.session_state.dev_2fa_stage = "totp_setup"
+                                    st.rerun()
+                                else:
+                                    gn_error("That email and password combination isn't recognized.", title="Sign-In Failed")
+
+                        with st.expander("Forgot your password?"):
+                            if not st.session_state.reset_mode:
+                                with st.form("forgot_password_request_form"):
+                                    reset_email_input = st.text_input("Registered Email Address", placeholder="you@example.com")
+                                    reset_requested = st.form_submit_button("Send Reset Code", use_container_width=True)
+
+                                if reset_requested:
+                                    if not reset_email_input:
+                                        gn_warning("Enter the email address on your account.", title="Email Required")
+                                    else:
+                                        users = load_api_users()
+                                        if reset_email_input not in users:
+                                            gn_error("No account found with that email address.", title="Account Not Found")
+                                        else:
+                                            code = str(random.randint(100000, 999999))
+                                            st.session_state.reset_code = code
+                                            st.session_state.reset_email = reset_email_input
+                                            st.session_state.reset_code_time = time.time()
+                                            with st.spinner("Sending reset code..."):
+                                                sent = send_code_email(reset_email_input, code, purpose="reset")
+                                            if sent:
+                                                log_activity(reset_email_input, "Requested password reset")
+                                                st.session_state.reset_mode = True
+                                                st.rerun()
+                            else:
+                                gn_info(f"Reset code sent to **{st.session_state.reset_email}**. It expires in 10 minutes.", title="Check Your Inbox")
+                                st.caption("Don't see it? Check your spam or junk folder — it can take a minute to arrive.")
+                                with st.form("forgot_password_confirm_form"):
+                                    entered_reset_code = st.text_input("6-Digit Code", placeholder="123456")
+                                    new_password = st.text_input("New Password", type="password", placeholder="At least 8 characters")
+                                    confirm_password = st.text_input("Confirm New Password", type="password", placeholder="Repeat new password")
+                                    reset_confirmed = st.form_submit_button("Reset Password", use_container_width=True)
+
+                                if reset_confirmed:
+                                    code_age = time.time() - (st.session_state.reset_code_time or 0)
+                                    if code_age > 600:
+                                        gn_error("That code has expired. Request a new one below.", title="Code Expired")
+                                    elif not entered_reset_code or entered_reset_code != st.session_state.reset_code:
+                                        gn_error("That code doesn't match what we sent. Double-check your email.", title="Incorrect Code")
+                                    elif not new_password:
+                                        gn_warning("Enter a new password.", title="Password Required")
+                                    elif len(new_password) < 8:
+                                        gn_warning("Password must be at least 8 characters.", title="Password Too Short")
+                                    elif new_password != confirm_password:
+                                        gn_error("The two passwords you entered don't match.", title="Password Mismatch")
+                                    else:
+                                        users = load_api_users()
+                                        if st.session_state.reset_email in users:
+                                            users[st.session_state.reset_email]["password"] = new_password
+                                            save_api_users(users)
+                                            log_activity(st.session_state.reset_email, "Completed password reset")
+                                            st.session_state.reset_mode = False
+                                            st.session_state.reset_code = None
+                                            st.session_state.reset_email = None
+                                            st.session_state.reset_code_time = None
+                                            gn_success("Password updated. Sign in with your new password above.", title="Password Updated")
+                                        else:
+                                            gn_error("That account no longer exists.", title="Account Not Found")
+
+                                if st.button("Cancel Reset", use_container_width=True):
+                                    st.session_state.reset_mode = False
+                                    st.session_state.reset_code = None
+                                    st.session_state.reset_email = None
+                                    st.session_state.reset_code_time = None
+                                    st.rerun()
+
+                    elif st.session_state.dev_2fa_stage == "totp_setup":
+                        st.subheader("Step 2 of 3 — Set Up Your Authenticator App")
+                        st.caption(
+                            f"Signing in as **{st.session_state.dev_2fa_email}**. This account doesn't have an "
+                            "authenticator configured yet — scan this QR code once (Google Authenticator, Authy, "
+                            "or similar), then confirm with the code it shows you."
+                        )
+                        uri = pyotp.totp.TOTP(st.session_state.dev_2fa_new_secret).provisioning_uri(
+                            name=st.session_state.dev_2fa_email, issuer_name="GhostNet Developer Portal"
+                        )
+                        st.image(make_qr_png_bytes(uri), width=220)
+                        st.code(st.session_state.dev_2fa_new_secret, language=None)
+                        st.caption("Can't scan it? Enter the key above manually as the account secret.")
+                        with st.form("dev_totp_setup_form"):
+                            setup_code = st.text_input("Enter the 6-digit code from your app", placeholder="123456")
+                            setup_submitted = st.form_submit_button("Confirm & Continue", use_container_width=True)
+
+                        if setup_submitted:
+                            valid = bool(setup_code) and pyotp.TOTP(st.session_state.dev_2fa_new_secret).verify(setup_code.strip(), valid_window=1)
+                            if not valid:
+                                gn_error("That code doesn't match. Scan the QR again and use the newest code shown.", title="Verification Failed")
+                            else:
+                                users = load_api_users()
+                                users[st.session_state.dev_2fa_email]["totp_secret"] = st.session_state.dev_2fa_new_secret
+                                save_api_users(users)
+                                log_activity(st.session_state.dev_2fa_email, "Enrolled authenticator app for account 2FA")
+                                email_code = str(random.randint(100000, 999999))
+                                with st.spinner("Sending email code..."):
+                                    sent = send_code_email(st.session_state.dev_2fa_email, email_code, purpose="2fa")
+                                if sent:
+                                    st.session_state.dev_2fa_email_code = email_code
+                                    st.session_state.dev_2fa_email_code_time = time.time()
+                                    st.session_state.dev_2fa_new_secret = None
+                                    st.session_state.dev_2fa_stage = "email"
+                                    st.rerun()
+
+                        if st.button("Cancel", key="cancel_dev_totp_setup"):
+                            st.session_state.dev_2fa_stage = None
+                            st.session_state.dev_2fa_email = None
+                            st.session_state.dev_2fa_new_secret = None
+                            st.rerun()
+
+                    elif st.session_state.dev_2fa_stage == "totp_verify":
+                        st.subheader("Step 2 of 3 — Authenticator App")
+                        st.caption(f"Signing in as **{st.session_state.dev_2fa_email}**. Enter the 6-digit code from your authenticator app.")
+                        with st.form("dev_totp_verify_form"):
+                            dev_totp_code = st.text_input("Authenticator Code", placeholder="123456")
+                            dev_totp_submitted = st.form_submit_button("Verify", use_container_width=True)
+
+                        if dev_totp_submitted:
                             users = load_api_users()
-                            if login_email in users and users[login_email]["password"] == login_pass:
+                            secret = users.get(st.session_state.dev_2fa_email, {}).get("totp_secret", "")
+                            valid = bool(dev_totp_code) and bool(secret) and pyotp.TOTP(secret).verify(dev_totp_code.strip(), valid_window=1)
+                            if not valid:
+                                gn_error("That authenticator code is incorrect or expired.", title="Verification Failed")
+                            else:
+                                email_code = str(random.randint(100000, 999999))
+                                with st.spinner("Sending email code..."):
+                                    sent = send_code_email(st.session_state.dev_2fa_email, email_code, purpose="2fa")
+                                if sent:
+                                    st.session_state.dev_2fa_email_code = email_code
+                                    st.session_state.dev_2fa_email_code_time = time.time()
+                                    st.session_state.dev_2fa_stage = "email"
+                                    st.rerun()
+
+                        if st.button("Cancel", key="cancel_dev_totp_verify"):
+                            st.session_state.dev_2fa_stage = None
+                            st.session_state.dev_2fa_email = None
+                            st.rerun()
+
+                    elif st.session_state.dev_2fa_stage == "email":
+                        st.subheader("Step 3 of 3 — Email Code")
+                        st.caption(f"Code sent to **{st.session_state.dev_2fa_email}**. It expires in 10 minutes.")
+                        with st.form("dev_email_2fa_form"):
+                            dev_email_code_entered = st.text_input("6-Digit Code", placeholder="123456")
+                            dev_email_submitted = st.form_submit_button("Complete Sign-In", use_container_width=True)
+
+                        if dev_email_submitted:
+                            code_age = time.time() - (st.session_state.dev_2fa_email_code_time or 0)
+                            if code_age > 600:
+                                gn_error("That code has expired. Sign in again to get a new one.", title="Code Expired")
+                                st.session_state.dev_2fa_stage = None
+                            elif dev_email_code_entered.strip() != st.session_state.dev_2fa_email_code:
+                                gn_error("That code doesn't match what we sent.", title="Incorrect Code")
+                            else:
                                 st.session_state.authenticated = True
                                 st.session_state.role = "customer"
-                                st.session_state.user = login_email
+                                st.session_state.user = st.session_state.dev_2fa_email
                                 st.session_state.is_customer = True
-                                log_login("Developer", login_email)
+                                log_login("Developer", st.session_state.dev_2fa_email)
+                                st.session_state.dev_2fa_stage = None
+                                st.session_state.dev_2fa_email = None
+                                st.session_state.dev_2fa_email_code = None
+                                st.session_state.dev_2fa_email_code_time = None
                                 st.rerun()
-                            else:
-                                gn_error("That email and password combination isn't recognized.", title="Sign-In Failed")
 
-                    with st.expander("Forgot your password?"):
-                        if not st.session_state.reset_mode:
-                            with st.form("forgot_password_request_form"):
-                                reset_email_input = st.text_input("Registered Email Address", placeholder="you@example.com")
-                                reset_requested = st.form_submit_button("Send Reset Code", use_container_width=True)
-
-                            if reset_requested:
-                                if not reset_email_input:
-                                    gn_warning("Enter the email address on your account.", title="Email Required")
-                                else:
-                                    users = load_api_users()
-                                    if reset_email_input not in users:
-                                        gn_error("No account found with that email address.", title="Account Not Found")
-                                    else:
-                                        code = str(random.randint(100000, 999999))
-                                        st.session_state.reset_code = code
-                                        st.session_state.reset_email = reset_email_input
-                                        st.session_state.reset_code_time = time.time()
-                                        with st.spinner("Sending reset code..."):
-                                            sent = send_code_email(reset_email_input, code, purpose="reset")
-                                        if sent:
-                                            log_activity(reset_email_input, "Requested password reset")
-                                            st.session_state.reset_mode = True
-                                            st.rerun()
-                        else:
-                            gn_info(f"Reset code sent to **{st.session_state.reset_email}**. It expires in 10 minutes.", title="Check Your Inbox")
-                            st.caption("Don't see it? Check your spam or junk folder — it can take a minute to arrive.")
-                            with st.form("forgot_password_confirm_form"):
-                                entered_reset_code = st.text_input("6-Digit Code", placeholder="123456")
-                                new_password = st.text_input("New Password", type="password", placeholder="At least 8 characters")
-                                confirm_password = st.text_input("Confirm New Password", type="password", placeholder="Repeat new password")
-                                reset_confirmed = st.form_submit_button("Reset Password", use_container_width=True)
-
-                            if reset_confirmed:
-                                code_age = time.time() - (st.session_state.reset_code_time or 0)
-                                if code_age > 600:
-                                    gn_error("That code has expired. Request a new one below.", title="Code Expired")
-                                elif not entered_reset_code or entered_reset_code != st.session_state.reset_code:
-                                    gn_error("That code doesn't match what we sent. Double-check your email.", title="Incorrect Code")
-                                elif not new_password:
-                                    gn_warning("Enter a new password.", title="Password Required")
-                                elif len(new_password) < 8:
-                                    gn_warning("Password must be at least 8 characters.", title="Password Too Short")
-                                elif new_password != confirm_password:
-                                    gn_error("The two passwords you entered don't match.", title="Password Mismatch")
-                                else:
-                                    users = load_api_users()
-                                    if st.session_state.reset_email in users:
-                                        users[st.session_state.reset_email]["password"] = new_password
-                                        save_api_users(users)
-                                        log_activity(st.session_state.reset_email, "Completed password reset")
-                                        st.session_state.reset_mode = False
-                                        st.session_state.reset_code = None
-                                        st.session_state.reset_email = None
-                                        st.session_state.reset_code_time = None
-                                        gn_success("Password updated. Sign in with your new password above.", title="Password Updated")
-                                    else:
-                                        gn_error("That account no longer exists.", title="Account Not Found")
-
-                            if st.button("Cancel Reset", use_container_width=True):
-                                st.session_state.reset_mode = False
-                                st.session_state.reset_code = None
-                                st.session_state.reset_email = None
-                                st.session_state.reset_code_time = None
-                                st.rerun()
+                        if st.button("Cancel", key="cancel_dev_email2fa"):
+                            st.session_state.dev_2fa_stage = None
+                            st.session_state.dev_2fa_email = None
+                            st.rerun()
 
                 with register_tab:
-                    if not st.session_state.verify_mode:
+                    if st.session_state.new_account_email:
+                        gn_success(f"Account provisioned for **{st.session_state.new_account_email}**.", title="Account Created")
+                        st.markdown("**Step 2 of 2 — set up your authenticator app (required for every future sign-in):**")
+                        new_uri = pyotp.totp.TOTP(st.session_state.new_account_totp_secret).provisioning_uri(
+                            name=st.session_state.new_account_email, issuer_name="GhostNet Developer Portal"
+                        )
+                        st.image(make_qr_png_bytes(new_uri), width=220)
+                        st.code(st.session_state.new_account_totp_secret, language=None)
+                        st.caption(
+                            "Scan with Google Authenticator, Authy, or similar (or enter the key above manually). "
+                            "This code is unique to your account — every developer gets their own. From now on, "
+                            "signing in needs your password, a code from this app, and a one-time code emailed to you."
+                        )
+                        if st.button("Done — I've added it", key="ack_new_account_2fa", use_container_width=True):
+                            st.session_state.new_account_email = None
+                            st.session_state.new_account_totp_secret = None
+                            st.rerun()
+                    elif not st.session_state.verify_mode:
                         with st.form("dev_register_form"):
                             reg_email = st.text_input("Email Address", placeholder="you@example.com")
                             reg_pass = st.text_input("Set Password", type="password", placeholder="At least 8 characters")
@@ -2270,12 +2417,14 @@ def render_landing():
                                     users = load_api_users()
                                     reg_email = st.session_state.pending_user["email"]
                                     generated_secret = f"gk_live_{secrets.token_hex(16)}"
+                                    new_totp_secret = pyotp.random_base32()
                                     users[reg_email] = {
                                         "password": st.session_state.pending_user["password"],
                                         "api_key": generated_secret,
                                         "quota": int(st.session_state.pending_user["quota"]),
                                         "requests_used": 0,
                                         "created_at": datetime.now().strftime("%Y-%m-%d"),
+                                        "totp_secret": new_totp_secret,
                                     }
                                     save_api_users(users)
                                     log_activity(reg_email, "Created developer account")
@@ -2283,7 +2432,9 @@ def render_landing():
                                     st.session_state.verify_mode = False
                                     st.session_state.verification_code = None
                                     st.session_state.pending_user = {}
-                                    gn_success("Account provisioned. Sign in via the Sign In tab.", title="Account Created")
+                                    st.session_state.new_account_email = reg_email
+                                    st.session_state.new_account_totp_secret = new_totp_secret
+                                    st.rerun()
                                 else:
                                     gn_error("That code doesn't match what we sent. Double-check your email.", title="Incorrect Code")
                         with col_v2:
