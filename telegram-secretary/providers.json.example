@@ -1,20 +1,21 @@
 [
   {
-    "name": "openrouter",
-    "base_url": "https://openrouter.ai/api/v1",
-    "api_key_env": "OPENROUTER_API_KEY",
-    "model": "openai/gpt-oss-20b:free"
+    "name": "gemini",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "api_key_env": "GEMINI_API_KEY",
+    "model": "gemini-2.5-flash"
   },
   {
-    "name": "groq",
-    "base_url": "https://api.groq.com/openai/v1",
-    "api_key_env": "GROQ_API_KEY",
-    "model": "llama-3.3-70b-versatile"
+    "name": "nvidia",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "api_key_env": "NVIDIA_API_KEY",
+    "model": "meta/llama-3.3-70b-instruct"
   },
   {
-    "name": "local-ollama",
-    "base_url": "http://localhost:11434/v1",
-    "api_key_env": "",
-    "model": "llama3.1"
+    "name": "claude-code",
+    "format": "anthropic",
+    "base_url": "PUT-YOUR-CLAUDE-ENDPOINT-HERE",
+    "api_key_env": "ANTHROPIC_API_KEY",
+    "model": "claude-sonnet-5"
   }
 ]

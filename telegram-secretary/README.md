@@ -83,9 +83,12 @@ dead key or a rate limit just falls through to the next:
   "api_key_env": "OPENROUTER_API_KEY", "model": "openai/gpt-oss-20b:free"}]
 ```
 
-Any provider speaking the OpenAI `/chat/completions` shape works as-is — OpenRouter, OpenAI, Groq,
-Together, a local Ollama (`http://localhost:11434/v1`, no key). A provider with a different request
-shape (Anthropic's native Messages API, say) would need a small adapter branch in `ai_providers.py`.
+Any provider speaking the OpenAI `/chat/completions` shape works as-is — Gemini's compatibility
+endpoint, NVIDIA NIM, OpenRouter, OpenAI, Groq, a local Ollama (`http://localhost:11434/v1`, no key).
+For an Anthropic-shaped endpoint add `"format": "anthropic"` and it posts to `/v1/messages` instead,
+with the system prompt split out and the key sent as `x-api-key`.
+
+The chain shipped here is Gemini, then NVIDIA, then the Claude endpoint.
 
 If every provider fails, **nothing is sent** and the admin chat gets told, so a human can step in.
 

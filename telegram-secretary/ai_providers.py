@@ -26,6 +26,43 @@ def providers():
     return [p for p in data if isinstance(p, dict) and p.get("base_url") and p.get("model")]
 
 
+def _split_system(messages):
+    system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
+    return system, [m for m in messages if m["role"] != "system"]
+
+
+def _call_anthropic(provider, messages, temperature, max_tokens):
+    """Anthropic's Messages API: the system prompt travels separately and the key is a header."""
+    key = os.environ.get(provider.get("api_key_env", ""), "").strip()
+    if provider.get("api_key_env") and not key:
+        raise RuntimeError("{} is not set in .env".format(provider["api_key_env"]))
+
+    system, turns = _split_system(messages)
+    headers = {"content-type": "application/json", "anthropic-version": "2023-06-01"}
+    if key:
+        headers["x-api-key"] = key
+    headers.update(provider.get("headers", {}))
+
+    response = requests.post(
+        provider["base_url"].rstrip("/") + "/v1/messages",
+        headers=headers,
+        json={
+            "model": provider["model"],
+            "system": system,
+            "messages": turns,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        },
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    blocks = response.json().get("content") or []
+    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    if not text:
+        raise ValueError("provider returned an empty message")
+    return text
+
+
 def _call(provider, messages, temperature, max_tokens):
     key = os.environ.get(provider.get("api_key_env", ""), "").strip()
     if provider.get("api_key_env") and not key:
@@ -63,8 +100,9 @@ def generate(messages, temperature=0.5, max_tokens=300):
     failures = []
     for provider in configured:
         name = provider.get("name") or provider["model"]
+        call = _call_anthropic if provider.get("format") == "anthropic" else _call
         try:
-            return _call(provider, messages, temperature, max_tokens), name
+            return call(provider, messages, temperature, max_tokens), name
         except Exception as exc:
             failures.append("{}: {}".format(name, exc))
             print("[ai] {} failed: {}".format(name, exc), flush=True)
