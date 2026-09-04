@@ -13,9 +13,16 @@
   },
   {
     "name": "claude-code",
-    "format": "anthropic",
-    "base_url": "PUT-YOUR-CLAUDE-ENDPOINT-HERE",
-    "api_key_env": "ANTHROPIC_API_KEY",
-    "model": "claude-sonnet-5"
+    "_comment": "local Claude Code wrapper. If it speaks OpenAI /chat/completions, delete format/path/payload/response_path and just set base_url. If it is Anthropic-shaped, set format to anthropic.",
+    "format": "custom",
+    "base_url": "http://127.0.0.1:PORT",
+    "path": "/PATH",
+    "api_key_env": "",
+    "auth": "bearer",
+    "model": "claude-code",
+    "payload": {
+      "prompt": "{prompt}"
+    },
+    "response_path": "response"
   }
 ]

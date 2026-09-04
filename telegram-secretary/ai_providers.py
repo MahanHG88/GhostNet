@@ -63,6 +63,74 @@ def _call_anthropic(provider, messages, temperature, max_tokens):
     return text
 
 
+def _flatten(messages):
+    system, turns = _split_system(messages)
+    lines = [system] if system else []
+    for turn in turns:
+        lines.append("{}: {}".format("Them" if turn["role"] == "user" else "You", turn["content"]))
+    return "\n\n".join(lines)
+
+
+def _fill(value, fields):
+    if isinstance(value, str):
+        return value.format(**fields) if "{" in value else value
+    if isinstance(value, dict):
+        return {k: _fill(v, fields) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_fill(v, fields) for v in value]
+    return value
+
+
+def _dig(data, path):
+    for step in path.split("."):
+        data = data[int(step)] if step.isdigit() else data[step]
+    return data
+
+
+def _call_custom(provider, messages, temperature, max_tokens):
+    """Anything that is neither OpenAI- nor Anthropic-shaped. The config says where to post,
+    what the body looks like, and where the reply sits in the response."""
+    key = os.environ.get(provider.get("api_key_env", ""), "").strip()
+    if provider.get("api_key_env") and not key:
+        raise RuntimeError("{} is not set in .env".format(provider["api_key_env"]))
+
+    system, turns = _split_system(messages)
+    fields = {
+        "prompt": _flatten(messages),
+        "system": system,
+        "message": turns[-1]["content"] if turns else "",
+        "model": provider["model"],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+
+    headers = {"Content-Type": "application/json"}
+    auth = provider.get("auth", "bearer")
+    if key and auth == "bearer":
+        headers["Authorization"] = "Bearer {}".format(key)
+    elif key and auth == "x-api-key":
+        headers["x-api-key"] = key
+    headers.update(_fill(provider.get("headers", {}), fields))
+
+    payload = _fill(provider.get("payload") or {"prompt": "{prompt}"}, fields)
+    response = requests.post(
+        provider["base_url"].rstrip("/") + provider.get("path", ""),
+        headers=headers,
+        json=payload,
+        timeout=TIMEOUT,
+    )
+    response.raise_for_status()
+    body = response.json()
+    try:
+        text = str(_dig(body, provider.get("response_path", "response"))).strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise ValueError("response_path {!r} does not fit the reply: {}".format(
+            provider.get("response_path", "response"), str(body)[:200])) from exc
+    if not text:
+        raise ValueError("provider returned an empty message")
+    return text
+
+
 def _call(provider, messages, temperature, max_tokens):
     key = os.environ.get(provider.get("api_key_env", ""), "").strip()
     if provider.get("api_key_env") and not key:
@@ -91,6 +159,9 @@ def _call(provider, messages, temperature, max_tokens):
     return text
 
 
+FORMATS = {"anthropic": _call_anthropic, "custom": _call_custom}
+
+
 def generate(messages, temperature=0.5, max_tokens=300):
     """Try each configured provider in order. Returns (reply_text, provider_name)."""
     configured = providers()
@@ -100,7 +171,7 @@ def generate(messages, temperature=0.5, max_tokens=300):
     failures = []
     for provider in configured:
         name = provider.get("name") or provider["model"]
-        call = _call_anthropic if provider.get("format") == "anthropic" else _call
+        call = FORMATS.get(provider.get("format"), _call)
         try:
             return call(provider, messages, temperature, max_tokens), name
         except Exception as exc:

@@ -88,6 +88,18 @@ endpoint, NVIDIA NIM, OpenRouter, OpenAI, Groq, a local Ollama (`http://localhos
 For an Anthropic-shaped endpoint add `"format": "anthropic"` and it posts to `/v1/messages` instead,
 with the system prompt split out and the key sent as `x-api-key`.
 
+A wrapper that is neither shape takes `"format": "custom"`, where the config describes the call:
+
+```json
+{"format": "custom", "base_url": "http://127.0.0.1:8787", "path": "/v1/ask",
+ "payload": {"prompt": "{prompt}"}, "response_path": "data.reply"}
+```
+
+`payload` is sent as the body with `{prompt}`, `{system}`, `{message}`, `{model}`, `{max_tokens}`
+and `{temperature}` filled in — `{prompt}` being the whole conversation flattened to text.
+`response_path` is where the reply sits in the JSON that comes back, digging through keys and list
+indices (`choices.0.message.content`). Get it wrong and the error tells you what came back instead.
+
 The chain shipped here is Gemini, then NVIDIA, then the Claude endpoint.
 
 If every provider fails, **nothing is sent** and the admin chat gets told, so a human can step in.
