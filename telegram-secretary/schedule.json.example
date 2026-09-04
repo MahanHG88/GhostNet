@@ -1,0 +1,29 @@
+{
+  "timezone": "Europe/Madrid",
+  "default": "away from her phone right now",
+  "weekly": {
+    "mon": [
+      {"from": "09:00", "to": "14:00", "status": "at work until 2pm"},
+      {"from": "15:00", "to": "19:00", "status": "at work until 7pm"}
+    ],
+    "tue": [
+      {"from": "09:00", "to": "14:00", "status": "at work until 2pm"},
+      {"from": "15:00", "to": "19:00", "status": "at work until 7pm"}
+    ],
+    "wed": [
+      {"from": "09:00", "to": "14:00", "status": "at work until 2pm"},
+      {"from": "15:00", "to": "19:00", "status": "at work until 7pm"}
+    ],
+    "thu": [
+      {"from": "09:00", "to": "14:00", "status": "at work until 2pm"},
+      {"from": "15:00", "to": "19:00", "status": "at work until 7pm"}
+    ],
+    "fri": [
+      {"from": "09:00", "to": "14:00", "status": "at work until 2pm"}
+    ],
+    "sat": [],
+    "sun": [
+      {"from": "00:00", "to": "23:59", "status": "off for the weekend and back on Monday"}
+    ]
+  }
+}

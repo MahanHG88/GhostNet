@@ -1,0 +1,20 @@
+[
+  {
+    "name": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_key_env": "OPENROUTER_API_KEY",
+    "model": "openai/gpt-oss-20b:free"
+  },
+  {
+    "name": "groq",
+    "base_url": "https://api.groq.com/openai/v1",
+    "api_key_env": "GROQ_API_KEY",
+    "model": "llama-3.3-70b-versatile"
+  },
+  {
+    "name": "local-ollama",
+    "base_url": "http://localhost:11434/v1",
+    "api_key_env": "",
+    "model": "llama3.1"
+  }
+]
