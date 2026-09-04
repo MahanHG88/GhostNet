@@ -59,14 +59,18 @@ nohup python bot.py > alvarez.log 2>&1 &    # background
 
 | Command | What it does |
 |---|---|
-| `/update <status>` | Set her status now, e.g. `/update on a flight for 6h` |
+| `/update <status>` | Set her status now, e.g. `/update en el medico for 2h` |
 | `/clear` | Drop the manual status, fall back to the schedule |
 | `/status` | What he'd tell someone right now, and where that came from |
-| `/messages` | Recent messages people left for her |
+| `/messages` | Messages still waiting for her (ones she answered herself drop off) |
+| `/test <message>` | See how he'd answer something, without sending anything to anyone |
 | `/pause` / `/resume` | Kill switch |
 | `/help` | The list |
 
 Everyone else who messages the bot directly is ignored.
+
+Status lines — in `schedule.json` and in `/update` — can be written in whatever language you want
+the replies to come out in. They're handed to the model as-is, so Spanish in, Spanish out.
 
 ## AI providers
 
@@ -99,6 +103,22 @@ python ai_providers.py "hi, is Martina free tomorrow?"
 - He presents as her assistant. He won't claim to be her, and if someone sincerely asks whether
   they're talking to a bot he says he handles her messages rather than denying it. That wording
   lives in `persona.md` and is yours to adjust.
+- Anyone pressing for where she is, whether she's alone, or wanting to meet her gets one neutral
+  line and nothing else — it goes in her message log for her to read herself.
+
+## Who sees what
+
+The admin chat sees conversations Mr. Alvarez actually answered — it has to, since he spoke in her
+name. `/messages` holds what's still waiting for her; anything she replies to herself drops off the
+list. Nothing is forwarded from chats she handles on her own.
+
+That still means the admin chat sees real messages sent to her account, so it should belong to her
+or to whoever is responsible for her, not to a bystander. She can disconnect the bot herself at any
+time from Settings → Account → Chat Automation, and `/pause` stops it instantly.
+
+Keep `persona.md` thin. It goes into every prompt, so anything personal in it — where she studies,
+her routine, who her friends are — is one persuasive stranger away from coming back out. The
+version here says she's a student in Asturias and nothing else, on purpose.
 
 ## Files
 

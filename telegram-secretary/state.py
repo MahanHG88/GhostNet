@@ -64,6 +64,13 @@ def add_inbox(entry):
     del inbox[:-MAX_INBOX]
 
 
+def mark_answered(chat_id):
+    """She answered this chat herself, so it is no longer a message waiting for her."""
+    for entry in load()["inbox"]:
+        if str(entry.get("chat_id")) == str(chat_id):
+            entry["answered"] = True
+
+
 def replies_today(record):
     replies = record.get("replies", {})
     return replies.get("count", 0) if replies.get("date") == date.today().isoformat() else 0

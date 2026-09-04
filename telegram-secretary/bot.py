@@ -34,7 +34,8 @@ HELP_TEXT = """Mr. Alvarez - Ms. Garcia's message desk
     /update travelling for 2d
 /clear - drop the manual status, go back to the schedule
 /status - what he would tell someone right now
-/messages - recent messages left for her
+/messages - messages still waiting for her
+/test <message> - see how he would answer, without sending anything
 /pause - stop replying to anyone
 /resume - start again
 /help - this list"""
@@ -112,6 +113,7 @@ def handle_business_message(message):
             log("chat {}: Ms. Garcia replied herself, standing down".format(chat_id))
         record["pending"] = None
         state.add_history(chat_id, "her", text)
+        state.mark_answered(chat_id)
         state.save()
         return
 
@@ -120,7 +122,13 @@ def handle_business_message(message):
 
     name = display_name(sender)
     state.add_history(chat_id, "them", text or "(sent a non-text message)")
-    state.add_inbox({"chat_id": chat_id, "name": name, "text": text or "(non-text message)", "ts": time.time()})
+    state.add_inbox({
+        "chat_id": chat_id,
+        "name": name,
+        "text": text or "(non-text message)",
+        "ts": time.time(),
+        "answered": False,
+    })
 
     sent_at = message.get("date", 0)
     if sent_at and time.time() - sent_at > STALE_AFTER_MINUTES * 60:
@@ -257,14 +265,14 @@ def status_report():
 
 
 def recent_messages(limit=10):
-    inbox = state.load().get("inbox", [])
-    if not inbox:
-        return "No messages yet."
+    waiting = [e for e in state.load().get("inbox", []) if not e.get("answered")]
+    if not waiting:
+        return "Nothing waiting - she has answered everyone herself."
     lines = []
-    for entry in inbox[-limit:]:
+    for entry in waiting[-limit:]:
         stamp = datetime.fromtimestamp(entry.get("ts", 0)).strftime("%d %b %H:%M")
         lines.append("{} - {}:\n{}".format(stamp, entry.get("name"), entry.get("text")))
-    return "Recent messages for Ms. Garcia:\n\n" + "\n\n".join(lines)
+    return "Waiting for her:\n\n" + "\n\n".join(lines)
 
 
 def handle_admin_message(message):
@@ -297,6 +305,23 @@ def handle_admin_message(message):
         send(chat_id, status_report())
     elif command == "/messages":
         send(chat_id, recent_messages())
+    elif command == "/test":
+        if not argument.strip():
+            send(chat_id, "Give me something to try, e.g. /test hola, esta Martina?")
+            return
+        status, source = schedule.current_status(data.get("override"))
+        messages = persona.build_messages(
+            history=[{"role": "them", "text": argument.strip()}],
+            status=status,
+            schedule_hint=schedule.availability_hint(),
+            sender_name="Test",
+        )
+        try:
+            reply, provider = ai_providers.generate(messages)
+            send(chat_id, "Them: {}\n\nMr. Alvarez: {}\n\nStatus: {} ({}) - via {}".format(
+                argument.strip(), reply, status, source, provider))
+        except ai_providers.AllProvidersFailed as exc:
+            send(chat_id, "Every provider failed: {}".format(exc))
     elif command == "/pause":
         data["paused"] = True
         state.save()
