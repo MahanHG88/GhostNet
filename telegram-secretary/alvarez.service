@@ -1,0 +1,23 @@
+# Mr. Alvarez as a managed service.
+#   cp alvarez.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now alvarez
+#   journalctl -u alvarez -f        # watch him work
+[Unit]
+Description=Mr. Alvarez - Telegram message desk
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A dedicated unprivileged user is better than root: adduser --system alvarez
+# then chown -R alvarez: /opt/telegram-secretary and set User=alvarez here.
+User=root
+WorkingDirectory=/opt/telegram-secretary
+ExecStart=/usr/bin/python3 /opt/telegram-secretary/bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

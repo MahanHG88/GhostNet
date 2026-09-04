@@ -49,12 +49,27 @@ cp contacts.json.example contacts.json      # chat ids of people she knows
 `ADMIN_CHAT_ID` is the only chat that can run commands, and the only one that sees the audit trail.
 Get it by messaging [@userinfobot](https://t.me/userinfobot).
 
+If the API keys already exist elsewhere on the machine, don't copy them — point `SHARED_ENV` at
+those files (`SHARED_ENV=/root/GhostNet/.env,/root/Sonava/.env`). Values set in this project's
+`.env` win; anything left blank is filled in from them.
+
 **4. Run**
 
 ```bash
-python bot.py                     # foreground
-nohup python bot.py > alvarez.log 2>&1 &    # background
+python bot.py                  # foreground, while you are setting things up
+python doctor.py --live        # checks token, connection, queue and every provider
 ```
+
+**5. Keep it running**
+
+```bash
+cp alvarez.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now alvarez
+journalctl -u alvarez -f       # every message he sees, every reason he stays quiet
+```
+
+The unit expects the project at `/opt/telegram-secretary` and restarts him if he dies or the box
+reboots. It runs as root as shipped; a dedicated unprivileged user is better, and the file says how.
 
 ## Commands (admin chat only)
 
