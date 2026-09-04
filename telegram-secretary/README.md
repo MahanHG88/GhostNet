@@ -43,6 +43,7 @@ cp .env.example .env                        # token + admin chat id + timings
 cp persona.example.md persona.md            # who she is, what he may say
 cp schedule.json.example schedule.json      # her week
 cp providers.json.example providers.json    # the AI providers to try, in order
+cp contacts.json.example contacts.json      # chat ids of people she knows
 ```
 
 `ADMIN_CHAT_ID` is the only chat that can run commands, and the only one that sees the audit trail.
@@ -94,10 +95,46 @@ Try the wording without touching Telegram:
 python ai_providers.py "hi, is Martina free tomorrow?"
 ```
 
+## Someone who won't stop
+
+Per person, Mr. Alvarez answers `AI_REPLY_LIMIT` times (4). After that the model is out of the loop
+entirely and they get `WARNING_LIMIT` (4) fixed warning lines, one per message — the `WARNINGS` list
+in `bot.py`, edit them to taste. Keep going past those and he stops replying in that chat for good.
+
+Everything resets the moment **she** writes to that person herself: four fresh replies, warnings
+cleared, silence lifted. Talking to someone is how she says they're welcome.
+
+The Bot API has no way to block anyone on her behalf, so "he goes quiet" is exactly that — Alvarez
+stops answering and the admin chat is told. Actually blocking someone is a thing she does in the
+Telegram app.
+
+## People she knows
+
+`contacts.json` maps a chat id to a name:
+
+```json
+{"123456789": {"name": "Full Name"}}
+```
+
+Anyone listed there is recognised: Mr. Alvarez greets them by name and treats them as expected
+rather than as a stranger, they skip the ladder above entirely, and they hear her availability
+precisely — the status as written and when it changes — where everyone else gets it without times.
+`EXEMPT_CHAT_IDS` in `.env` does the same minus the name, for someone she wants exempt without
+recording who they are.
+
+That is the whole of the difference. Everything in the Never list of `persona.md` applies to a
+recognised contact exactly as it does to a stranger.
+
+Her private life is not in the prompt at all — not her relationships, not who she spends time with.
+Alvarez cannot confirm, deny or hint at any of it to anyone, because he has never been told. That is
+deliberate: anything written into `persona.md` or `contacts.json` is one persuasive stranger away
+from coming back out, so the file holds names and nothing else.
+
 ## Guardrails
 
 - Never answers before the delay — if she replies first, he stays quiet.
-- One reply per chat per `REPLY_COOLDOWN_MINUTES`, capped at `MAX_REPLIES_PER_CHAT_PER_DAY`.
+- One AI reply per chat per `REPLY_COOLDOWN_MINUTES`, capped at `MAX_REPLIES_PER_CHAT_PER_DAY`.
+  Warnings skip the cooldown, so someone spamming reaches silence quickly instead of over hours.
 - Never answers other bots, and never replies to messages older than an hour (so a restart after
   downtime doesn't answer stale conversations).
 - He presents as her assistant. He won't claim to be her, and if someone sincerely asks whether
@@ -128,7 +165,8 @@ version here says she's a student in Asturias and nothing else, on purpose.
 | `ai_providers.py` | Provider chain with fallback, plus the dry-run CLI |
 | `persona.py` | Builds the prompt from persona + status + chat history |
 | `schedule.py` | Resolves the current status |
+| `contacts.py` | `contacts.json` — chat ids of people she has recognised |
 | `state.py` | `state.json` — connection, overrides, pending replies, history, message inbox |
 
-`.env`, `persona.md`, `schedule.json`, `providers.json` and `state.json` are all git-ignored: the
+`.env`, `persona.md`, `schedule.json`, `providers.json`, `contacts.json` and `state.json` are all git-ignored: the
 token and her personal details stay on the machine that runs this.

@@ -7,6 +7,7 @@ from datetime import datetime
 import requests
 
 import ai_providers
+import contacts
 import env
 import persona
 import schedule
@@ -19,6 +20,19 @@ ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "").strip()
 REPLY_DELAY_MINUTES = env.get_int("REPLY_DELAY_MINUTES", 5)
 REPLY_COOLDOWN_MINUTES = env.get_int("REPLY_COOLDOWN_MINUTES", 30)
 MAX_REPLIES_PER_CHAT_PER_DAY = env.get_int("MAX_REPLIES_PER_CHAT_PER_DAY", 5)
+AI_REPLY_LIMIT = env.get_int("AI_REPLY_LIMIT", 4)
+WARNING_LIMIT = env.get_int("WARNING_LIMIT", 4)
+EXEMPT_CHAT_IDS = {
+    part.strip() for part in os.environ.get("EXEMPT_CHAT_IDS", "").split(",") if part.strip()
+}
+
+# Sent verbatim once Mr. Alvarez has used up his replies. No model involved.
+WARNINGS = [
+    "Ya te he dicho que ahora no esta disponible. Por favor, no sigas escribiendo.",
+    "Sigue sin estar disponible. Deja de escribir, por favor.",
+    "Tercer aviso: por favor, deja de escribir a este numero.",
+    "Ultimo aviso. Si sigues escribiendo, no se contestara mas a este chat.",
+]
 
 API_BASE = "https://api.telegram.org/bot{}".format(BOT_TOKEN)
 ALLOWED_UPDATES = ["message", "business_connection", "business_message"]
@@ -111,7 +125,12 @@ def handle_business_message(message):
     if sender.get("id") and sender.get("id") == connection.get("owner_id"):
         if record.get("pending"):
             log("chat {}: Ms. Garcia replied herself, standing down".format(chat_id))
+        if record.get("muted") or record.get("warnings") or record.get("ai_replies"):
+            log("chat {}: she wrote to them herself, limits reset".format(chat_id))
         record["pending"] = None
+        record["ai_replies"] = 0
+        record["warnings"] = 0
+        record["muted"] = False
         state.add_history(chat_id, "her", text)
         state.mark_answered(chat_id)
         state.save()
@@ -148,6 +167,25 @@ def handle_business_message(message):
     state.save()
 
 
+def is_exempt(chat_id):
+    """People she has named in contacts.json, plus any bare ids in EXEMPT_CHAT_IDS."""
+    return str(chat_id) in EXEMPT_CHAT_IDS or contacts.get(chat_id) is not None
+
+
+def decide(chat_id, record):
+    """ai -> Mr. Alvarez answers. warn -> a fixed line, no model. mute -> he goes quiet for good,
+    until she writes to them herself."""
+    if record.get("muted"):
+        return "muted"
+    if is_exempt(chat_id):
+        return "ai"
+    if record.get("ai_replies", 0) < AI_REPLY_LIMIT:
+        return "ai"
+    if record.get("warnings", 0) < WARNING_LIMIT:
+        return "warn"
+    return "mute"
+
+
 def _blocked_reason(record):
     connection = state.load()["connection"]
     if not connection.get("is_enabled", True):
@@ -161,6 +199,24 @@ def _blocked_reason(record):
     return None
 
 
+def warn(chat_id, record, pending):
+    index = min(record.get("warnings", 0), len(WARNINGS) - 1)
+    send(chat_id, WARNINGS[index], connection_id=pending.get("connection_id"))
+    record["warnings"] = record.get("warnings", 0) + 1
+    state.add_history(chat_id, "alvarez", WARNINGS[index])
+    log("chat {}: warning {} of {} to {}".format(chat_id, record["warnings"], WARNING_LIMIT, pending.get("name")))
+
+
+def mute(chat_id, record, pending):
+    record["muted"] = True
+    log("chat {}: muted, {} kept writing after every warning".format(chat_id, pending.get("name")))
+    notify_admin(
+        "{} kept writing after all {} warnings, so Mr. Alvarez has gone quiet in that chat.\n\n"
+        "He will stay quiet until she writes to them herself. Telegram only lets her block someone "
+        "from the app - the bot cannot do it for her.".format(pending.get("name"), WARNING_LIMIT)
+    )
+
+
 def _last_incoming(record):
     for entry in reversed(record.get("history", [])):
         if entry.get("role") == "them":
@@ -170,11 +226,14 @@ def _last_incoming(record):
 
 def answer(chat_id, record, pending):
     status, source = schedule.current_status(state.load().get("override"))
+    trusted = is_exempt(chat_id)
     messages = persona.build_messages(
         history=record.get("history", []),
         status=status,
-        schedule_hint=schedule.availability_hint(),
+        schedule_hint=schedule.availability_hint() if trusted else "",
         sender_name=pending.get("name"),
+        trusted=trusted,
+        contact=contacts.get(chat_id),
     )
 
     try:
@@ -191,6 +250,7 @@ def answer(chat_id, record, pending):
     send(chat_id, reply, connection_id=pending.get("connection_id"))
     state.add_history(chat_id, "alvarez", reply)
     state.bump_reply(record)
+    record["ai_replies"] = record.get("ai_replies", 0) + 1
     log("chat {}: replied to {} via {}".format(chat_id, pending.get("name"), provider))
     notify_admin(
         "{} wrote to Ms. Garcia:\n{}\n\nMr. Alvarez answered:\n{}\n\nStatus used: {} ({}) - via {}".format(
@@ -214,12 +274,22 @@ def process_pending():
         if data.get("paused"):
             log("chat {}: paused, not replying".format(chat_id))
             continue
-        blocked = _blocked_reason(record)
-        if blocked:
-            log("chat {}: not replying - {}".format(chat_id, blocked))
+
+        action = decide(chat_id, record)
+        if action == "muted":
             continue
+
         try:
-            answer(chat_id, record, pending)
+            if action == "mute":
+                mute(chat_id, record, pending)
+            elif action == "warn":
+                warn(chat_id, record, pending)
+            else:
+                blocked = _blocked_reason(record)
+                if blocked:
+                    log("chat {}: not replying - {}".format(chat_id, blocked))
+                    continue
+                answer(chat_id, record, pending)
         except Exception as exc:
             log("chat {}: failed to reply - {}".format(chat_id, exc))
             notify_admin("Failed to reply to {}: {}".format(pending.get("name"), exc))
@@ -261,6 +331,9 @@ def status_report():
     lines.append("Replies sent today: {}".format(
         sum(state.replies_today(c) for c in data["chats"].values())
     ))
+    muted = sum(1 for c in data["chats"].values() if c.get("muted"))
+    if muted:
+        lines.append("Gone quiet in {} chat(s) after warnings".format(muted))
     return "\n".join(lines)
 
 

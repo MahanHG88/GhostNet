@@ -48,7 +48,15 @@ def chat(chat_id):
     chats = load()["chats"]
     key = str(chat_id)
     if key not in chats:
-        chats[key] = {"history": [], "pending": None, "last_reply_at": 0, "replies": {"date": "", "count": 0}}
+        chats[key] = {
+            "history": [],
+            "pending": None,
+            "last_reply_at": 0,
+            "replies": {"date": "", "count": 0},
+            "ai_replies": 0,
+            "warnings": 0,
+            "muted": False,
+        }
     return chats[key]
 
 
